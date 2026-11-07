@@ -1,0 +1,72 @@
+
+name: Build FreeRDP macOS 13 ARM64
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 360
+
+    steps:
+      - name: Download official FreeRDP 3.33.0
+        shell: bash
+        run: |
+          git clone --depth 1 --branch 3.33.0 \
+            https://github.com/FreeRDP/FreeRDP.git \
+            freerdp-src
+
+          cd freerdp-src
+          git log -1 --format="%H %s"
+
+          # Verify official release commit prefix
+          [[ "$(git rev-parse HEAD)" == 5a10d7b* ]]
+
+      - name: Install build tools
+        shell: bash
+        run: |
+          brew install \
+            cmake ninja meson \
+            autoconf automake libtool pkg-config
+
+      - name: Build macOS ARM64
+        shell: bash
+        run: |
+          cd freerdp-src
+
+          bash scripts/bundle-mac-os.sh \
+            --arch "arm64" \
+            --target 13
+
+      - name: Package and checksum
+        shell: bash
+        run: |
+          cd freerdp-src/build-macos/install
+
+          test -d MacFreeRDP.app/Contents/MacOS
+
+          find MacFreeRDP.app/Contents/MacOS \
+            -maxdepth 1 -type f -print
+
+          zip -qr "$GITHUB_WORKSPACE/FreeRDP-macos13-arm64.zip" \
+            MacFreeRDP.app
+
+          cd "$GITHUB_WORKSPACE"
+
+          shasum -a 256 FreeRDP-macos13-arm64.zip \
+            > SHA256SUMS.txt
+
+          cat SHA256SUMS.txt
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FreeRDP-macOS13-ARM64
+          path: |
+            FreeRDP-macos13-arm64.zip
+            SHA256SUMS.txt
+          if-no-files-found: error
